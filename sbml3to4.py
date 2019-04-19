@@ -8,7 +8,7 @@ import ply.yacc as yacc
 debugging = True
 
 
-# debugging = False
+debugging = False
 
 
 def debug(s, t=""):
@@ -44,8 +44,8 @@ class IdNode(Node):
         debug("IDNode init = ", self.value)
 
     def evaluate(self):
-        debug("IDNode evaluate", var_lookup(self.value).evaluate())
-        return var_lookup(self.value).evaluate()
+        debug("IDNode evaluate", var_lookup(self.value))
+        return var_lookup(self.value)
         # return self.value
 
     def execute(self):
@@ -445,10 +445,16 @@ class PrintNode(Node):
         #     v = "'" + v + "'"
         self.value = v
 
+    def evaluate(self):
+        print("print node eval = ", self.value.evaluate())
+        return self.value.evaluate()
+
     def execute(self):
         # self.value = self.value.evaluate
-        print(self.value)
-        return self.value
+        # print(self.evaluate())
+        print("print node exe = ", self.value)
+        print(self.value.execute())
+        # return self.evaluate()
 
 
 def set_var(v, val, index=None):
@@ -475,7 +481,7 @@ class AssignNode(Node):
 
     def execute(self):
         self.evaluate()
-        print("AssignNode execute = ", var_lookup(self.id))
+        print("AssignNode execute = ", self.id, var_lookup(self.id).execute())
 
 
 # def p_expression_statement(t):
@@ -519,8 +525,7 @@ def p_statement_assignment(t):
 def p_statement_print(t):
     'print : PRINT LPAREN expression RPAREN'
     debug("p_statement_print:", t[3])
-    debug("p_statement_print eval:", t[3].evaluate())
-    t[0] = PrintNode(t[3].evaluate())
+    t[0] = PrintNode(t[3])
 
 
 def p_expression_group(t):
@@ -567,19 +572,40 @@ def p_expression_tuple(t):
     else:
         t[0] = TupleNode([])
 
+class IndexingNode(Node):
+    def __init__(self, v, index):
+        self.value = v
+        self.index = index
+
+    def evaluate(self):
+        index = self.index.evaluate()
+        v = self.value
+        debug("indexing node eval v = ",v)
+        if isinstance(index, bool) or not isinstance(index, int) or not isinstance(v, (ListNode, TupleNode, StringNode, IdNode)):
+            raise ValueError("IndexingNode")
+        if isinstance(v, IdNode):
+            v = v.evaluate()
+            debug("indexing node eval v = ", v)
+
+        return v.get_element(index)
+
+    def execute(self):
+        return self.evaluate().execute()
 
 def p_expression_tuple_index(t):
     '''indexing : HASHTAG expression LPAREN expression RPAREN
                 | HASHTAG expression expression '''
     # print("p_expression_tuple_index")
     # print(t[2])
-    index = t[2].evaluate()
-    if isinstance(index, bool) or not isinstance(index, int):
-        raise ValueError("p_expression_tuple_index")
+    # index = t[2].evaluate()
+    # if isinstance(index, bool) or not isinstance(index, int):
+    #     raise ValueError("p_expression_tuple_index")
     if len(t) > 4:
-        t[0] = t[4].get_element(index)
+        # t[0] = t[4].get_element(index)
+        t[0] = IndexingNode(t[2],t[4])
     else:
-        t[0] = t[3].get_element(index)
+        # t[0] = t[3].get_element(index)
+        t[0] = IndexingNode(t[2],t[3])
 
 
 def p_expression_list(t):
@@ -594,60 +620,72 @@ def p_expression_list(t):
         t[0] = ListNode()
 
 
-class IndexingNode(Node):
-    def __init__(self, v, index, offset=0):
-        self.value = v
-        self.index = index
-        self.offset = offset
-
-    def evaluate(self):
-        index = self.index.evaluate()
-        v = self.value
-        if isinstance(index, bool) or not isinstance(index, int) or not isinstance(v, (ListNode, StringNode, IdNode)):
-            raise ValueError("IndexingNode")
-        if isinstance(v, IdNode):
-            v = v.evaluate()
-        return v.get_element(index - self.offset)
-
-    def execute(self):
-        return self.evaluate()
-
 def p_expression_list_index(t):
     'indexing : expression LBRACKET expression RBRACKET'
 
     # print(t[3])
-    index = t[3].evaluate()
-    var = t[1]
-    debug("p_expression_list_index index= ", index)
-    if isinstance(index, bool) or not isinstance(index, int) or not isinstance(t[1], (ListNode, StringNode, IdNode)):
-        raise ValueError("p_expression_list_index")
-    t[0] = t[1].get_element(index)
+    # index = t[3].evaluate()
+    var = t[3]
+    debug("p_expression_list_index index= ", var)
+    # if isinstance(index, bool) or not isinstance(index, int) or not isinstance(t[1], (ListNode, StringNode, IdNode)):
+    #     raise ValueError("p_expression_list_index")
+    # t[0] = t[1].get_element(index)
+    t[0] = IndexingNode(t[1], t[3])
 
+class InNode(Node):
+    def __init__(self, v1, v2):
+        self.v1 = v1
+        self.v2 = v2
+
+    def evaluate(self):
+        v1 = self.v1.evaluate()
+        v2 = self.v2.evaluate()
+        if isinstance(v2, (list, str)):
+            condition = v1 in v2
+            return BooleanNode(condition)
+        else:
+            raise ValueError
+
+    def execute(self):
+        return self.evaluate()
 
 def p_expression_in(t):
     'expression : expression IN expression'
     # t1 can be anything, when t3 is list
     # t1 must be str when t3 is str
-    t3 = t[3].evaluate()
-    t1 = t[1].evaluate()
-    if isinstance(t3, list):
-        condition = t1 in t3
-        t[0] = BooleanNode(condition)
-    elif isinstance(t3, str):
-        if isinstance(t1, str):
-            condition = t1 in t3
-            t[0] = BooleanNode(condition)
-        else:
-            raise ValueError
-    else:
-        raise ValueError
+    # t3 = t[3].evaluate()
+    # t1 = t[1].evaluate()
+    # if isinstance(t3, list):
+    #     condition = t1 in t3
+    #     t[0] = BooleanNode(condition)
+    # elif isinstance(t3, str):
+    #     if isinstance(t1, str):
+    #         condition = t1 in t3
+    #         t[0] = BooleanNode(condition)
+    #     else:
+    #         raise ValueError
+    # else:
+    #     raise ValueError
+    t[0] = InNode(t[1],t[3])
+
+class ConsNode(Node):
+    def __init__(self, v1, v2):
+        self.v1 = v1
+        self.v2 = v2
+    def evaluate(self):
+        self.v2.cons(self.v1)
+
+    def execute(self):
+        return self.evaluate()
 
 
 def p_expression_cons(t):
     '''expression : expression CONS expression'''
     # t3 must be list
     # print(t[1])
-    t[0] = t[3].cons(t[1])
+
+    t[0] = ConsNode(t[1],t[3])
+    # t[0] = t[3].cons(t[1])
 
 
 def p_expression_comparison(t):
@@ -673,15 +711,28 @@ def p_expression_bool_op(t):
     t[0] = BoolOpNode(t[2], t[1], t[3])
     # print(t[0].value, t[0])
 
+class NotNode(Node):
+    def __init__(self, v):
+        self.v = v
+
+    def evaluate(self):
+        v = self.v.evaluate()
+        if not isinstance(v, bool):
+            raise ValueError
+        return BooleanNode(not v)
+
+    def execute(self):
+        return self.evaluate()
 
 def p_expression_not(t):
     'expression : NOT expression'
     # FIXME: replace value with evaluate
-    if not isinstance(t[2].evaluate(), bool):
-        raise ValueError
-    debug("p_expression_not: ", t[2].value)
-    t[0] = BooleanNode(not t[2].evaluate())
-    debug("p_expression_not: ", t[0].value)
+    # if not isinstance(t[2].evaluate(), bool):
+    #     raise ValueError
+    # debug("p_expression_not: ", t[2].value)
+    # t[0] = BooleanNode(not t[2].evaluate())
+    # debug("p_expression_not: ", t[0].value)
+    t[0] = NotNode(t[2])
 
 
 def p_expression_uminus(t):
@@ -734,7 +785,7 @@ def test_one(codes=None):
                 if not token:
                     break
                 print(token)
-
+            print("_______")
             ast = yacc.parse(code)
             debug("ast:", ast)
             result = ast.execute()
