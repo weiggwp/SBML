@@ -6,8 +6,6 @@ import sys
 import ply.yacc as yacc
 
 debugging = True
-
-
 debugging = False
 
 
@@ -34,6 +32,7 @@ class Node:
 
 def var_lookup(v):
     global var_dict
+    debug(var_dict)
     return var_dict[v]
 
 
@@ -44,12 +43,14 @@ class IdNode(Node):
         debug("IDNode init = ", self.value)
 
     def evaluate(self):
-        debug("IDNode evaluate", var_lookup(self.value))
+        debug("IDNode evaluate:", var_lookup(self.value))
         return var_lookup(self.value)
         # return self.value
 
     def execute(self):
-        return self.evaluate()
+        return var_lookup(self.value)
+
+        # return self.evaluate().execute()
 
 
 class BooleanNode(Node):
@@ -161,12 +162,15 @@ class ComparisonNode(BooleanNode):
         v1 = self.v1.evaluate()
         v2 = self.v2.evaluate()
         debug("ComparisonNode: v1= ", v1)
+        debug("ComparisonNode: self v1= ", self.v1.execute())
+
         debug("ComparisonNode: v2= ", v2)
+        debug("ComparisonNode: ", self.comparator)
         if isinstance(v1, bool) or isinstance(v2, bool):
-            raise ValueError
+            raise ValueError("is bool")
         if not ((isinstance(v1, (int, float)) and isinstance(v2, (int, float))) or (
                 isinstance(v1, str) and isinstance(v2, str))):
-            raise ValueError
+            raise ValueError(v1)
         try:
             if self.comparator == '<':
                 self.value = v1 < v2
@@ -187,9 +191,37 @@ class ComparisonNode(BooleanNode):
             raise Exception("SEMANTIC ERROR")
 
     def execute(self):
-        self.evaluate()
-        # print("compare execute")
-        return self.value
+        v1 = self.v1.execute()
+        v2 = self.v2.evaluate()
+        debug("ComparisonNode: v1= ", v1)
+        debug("ComparisonNode: self v1= ", self.v1.execute())
+
+        debug("ComparisonNode: v2= ", v2)
+        debug("ComparisonNode: ", self.comparator)
+        if isinstance(v1, bool) or isinstance(v2, bool):
+            raise ValueError("is bool")
+        if not ((isinstance(v1, (int, float)) and isinstance(v2, (int, float))) or (
+                isinstance(v1, str) and isinstance(v2, str))):
+            raise ValueError(v1)
+        try:
+            if self.comparator == '<':
+                self.value = v1 < v2
+            elif self.comparator == '>':
+                self.value = (v1 > v2)
+
+            elif self.comparator == '<=':
+                self.value = (v1 <= v2)
+            elif self.comparator == '>=':
+                self.value = (v1 >= v2)
+            elif self.comparator == '==':
+                self.value = (v1 == v2)
+            elif self.comparator == '<>':
+                self.value = (v1 < v2 or v1 > v2)
+            debug("ComparisonNode: value= ", self.value)
+
+            return self.value
+        except Exception:
+            raise Exception("SEMANTIC ERROR")
 
 
 class BoolOpNode(BooleanNode):
@@ -228,8 +260,22 @@ class BopNode(Node):
         self.value = 0
 
     def evaluate(self):
+
         v1 = self.v1.evaluate()
         v2 = self.v2.evaluate()
+        res = self.operate(v1, v2)
+        debug("BopNode eval ", self.value)
+        return res
+
+    def execute(self):
+        v1 = self.v1.execute()
+        v2 = self.v2.execute()
+        self.operate(v1, v2)
+        debug("BopNode exe", self.value)
+        return self.value
+
+    def operate(self, v1, v2):
+
         if isinstance(v1, bool) or isinstance(v2, bool):
             raise ValueError
         try:
@@ -258,16 +304,11 @@ class BopNode(Node):
                 else:
                     raise ValueError
 
-            debug(self.value)
+            # debug(self.value)
             return self.value
         except Exception as e:
             debug(e)
             raise Exception("SEMANTIC ERROR")
-
-    def execute(self):
-        debug(self.value)
-        self.evaluate()
-        return self.value
 
 
 class ListNode(Node):
@@ -292,9 +333,12 @@ class ListNode(Node):
         return self.value[index]
 
     def evaluate(self):
+        debug("List Node evall")
+
         return [x.evaluate() for x in self.value]
 
     def execute(self):
+        debug("List Node exe")
         return [x.execute() for x in self.value]
 
 
@@ -317,6 +361,149 @@ class TupleNode(Node):
         return tuple([x.execute() for x in self.value])
 
 
+class PrintNode(Node):
+    def __init__(self, v):
+        super().__init__()
+        # if isinstance(v, str):
+        #     v = "'" + v + "'"
+        self.value = v
+
+    def evaluate(self):
+        debug("print node eval = ", self.value.evaluate())
+        return self.value.evaluate()
+
+    def execute(self):
+        # self.value = self.value.evaluate
+        # print(self.evaluate())
+        debug("print node exe = ", self.value)
+        print(self.value.execute())
+        # return self.evaluate()
+
+
+def set_var(v, val, index=None):
+    # global var_dict
+    d = var_dict
+
+    if index is None:
+        var_dict[v] = val.evaluate()
+    else:
+        var_dict[v][index] = val.evaluate()
+    debug('set_var: {}->{}'.format(v,val))
+
+
+class AssignNode(Node):
+    def __init__(self, id_node, value, index=None):
+        super().__init__()
+        self.id = id_node.value
+        self.value = value
+        self.index = index
+        debug("AssignNode Init id= ", self.id)
+
+    def evaluate(self):
+        index = self.index
+        if index is not None:
+            index = index.evaluate()
+        # FIXME: or can take index out of set_var, by get value then set it
+        set_var(self.id, self.value, index)
+        # debug("AssignNode evaluate = ", var_lookup(self.id))
+
+    def execute(self):
+
+        index = self.index
+        if index is not None:
+            index = index.execute()
+        # FIXME: or can take index out of set_var, by get value then set it
+        set_var(self.id, self.value, index)
+        debug("AssignNode execute = ", var_lookup(self.id))
+
+        # self.evaluate()
+        # debug("AssignNode execute = ", var_lookup(self.id).execute())
+
+
+class BlockNode(Node):
+    def __init__(self, sl):
+        super().__init__()
+        self.statementList = sl
+
+    def evaluate(self):
+        for statement in self.statementList:
+            statement.evaluate()
+
+    def execute(self):
+        for statement in self.statementList:
+            statement.execute()
+
+
+class IndexingNode(Node):
+    def __init__(self, v, index):
+        super().__init__()
+        self.value = v
+        self.index = index
+
+    def evaluate(self):
+        index = self.index.evaluate()
+        v = self.value
+        debug("indexing node eval v = ", v)
+        if isinstance(index, bool) or not isinstance(index, int):
+            raise ValueError("IndexingNode")
+        if isinstance(v, Node):
+            v = v.evaluate()
+            debug("indexing node eval v = ", v)
+
+        return v[index]
+
+    def execute(self):
+        debug("indexing node exe v = ", self.value)
+        return self.evaluate()
+
+
+class InNode(Node):
+    def __init__(self, v1, v2):
+        super().__init__()
+        self.v1 = v1
+        self.v2 = v2
+
+    def evaluate(self):
+        v1 = self.v1.evaluate()
+        v2 = self.v2.evaluate()
+        if isinstance(v2, (list, str)):
+            condition = v1 in v2
+            return BooleanNode(condition)
+        else:
+            raise ValueError
+
+    def execute(self):
+        return self.evaluate()
+
+
+class ConsNode(Node):
+    def __init__(self, v1, v2):
+        super().__init__()
+        self.v1 = v1
+        self.v2 = v2
+
+    def evaluate(self):
+        self.v2.cons(self.v1)
+
+    def execute(self):
+        return self.evaluate()
+
+
+class NotNode(Node):
+    def __init__(self, v):
+        super().__init__()
+        self.v = v
+
+    def evaluate(self):
+        v = self.v.evaluate()
+        if not isinstance(v, bool):
+            raise ValueError
+        return not v
+
+    def execute(self):
+        return self.evaluate()
+
+
 reserved = {
     'if': 'IF',
     'then': 'THEN',
@@ -329,13 +516,15 @@ reserved = {
     'not': 'NOT',
     'andalso': 'ANDALSO',
     'orelse': 'ORELSE',
+    # 'True' : 'BOOLEAN',
+    # 'False' : 'BOOLEAN',
 
 }
 
 tokens = [
              'NUMBER', 'INTEGER', 'REAL', 'STRING', 'BOOLEAN',
              'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'POWER',
-             'LPAREN', 'RPAREN', 'LBRACKET', 'RBRACKET',
+             'LPAREN', 'RPAREN', 'LBRACKET', 'RBRACKET', 'LCURLY', 'RCURLY',
              'COMMA', 'HASHTAG', 'SEMICOLON', 'CONS',
              'LES', 'GRT', 'LEQ', 'GEQ', 'EQUALEQUAL', 'LESORGRT',
              'ID', 'EQUAL',
@@ -350,6 +539,8 @@ t_LPAREN = r'\('
 t_RPAREN = r'\)'
 t_LBRACKET = r'\['
 t_RBRACKET = r'\]'
+t_LCURLY = r'\{'
+t_RCURLY = r'\}'
 t_COMMA = r','
 t_SEMICOLON = r';'
 t_HASHTAG = r'[#]'
@@ -364,12 +555,6 @@ t_LESORGRT = r'<>'
 t_EQUAL = r'='
 
 
-def t_ID(t):
-    r'[a-zA-Z_][a-zA-Z_0-9]*'
-    t.type = reserved.get(t.value, 'ID')  # Check for reserved words
-    if t.type == 'ID':
-        t.value = IdNode(t.value)
-    return t
 
 
 def t_NUMBER(t):
@@ -408,6 +593,13 @@ def t_BOOLEAN(t):
     t.value = BooleanNode(t.value)
     return t
 
+def t_ID(t):
+    r'[a-zA-Z_][a-zA-Z_0-9]*'
+    t.type = reserved.get(t.value, 'ID')  # Check for reserved words
+    if t.type == 'ID':
+        t.value = IdNode(t.value)
+    return t
+
 
 # Ignored characters
 t_ignore = " \t"
@@ -438,86 +630,142 @@ precedence = (
 )
 
 
-class PrintNode(Node):
-    def __init__(self, v):
-        super().__init__()
-        # if isinstance(v, str):
-        #     v = "'" + v + "'"
-        self.value = v
-
-    def evaluate(self):
-        print("print node eval = ", self.value.evaluate())
-        return self.value.evaluate()
-
-    def execute(self):
-        # self.value = self.value.evaluate
-        # print(self.evaluate())
-        print("print node exe = ", self.value)
-        print(self.value.execute())
-        # return self.evaluate()
+def p_block2(p):
+    '''
+     block : LCURLY block RCURLY
+    '''
+    # [s.execute() for s in p[2]]
+    p[0] = p[2]
 
 
-def set_var(v, val, index=None):
-    global var_dict
-    if index is None:
-        var_dict[v] = val
-    else:
-        var_dict[v][index] = val
+def p_block(p):
+    '''
+     block : LCURLY statement_list RCURLY
+    '''
+    p[0] = BlockNode(p[2])
+
+def p_block_empty(p):
+    '''
+     block : LCURLY RCURLY
+    '''
+    p[0] = BlockNode([])
+
+def p_statement_list(p):
+    '''
+     statement_list : statement_list statement
+    '''
+    p[0] = p[1] + [p[2]]
 
 
-# new
-class AssignNode(Node):
-    def __init__(self, id_node, value, index=None):
-        super().__init__()
-        self.id = id_node.value
-        self.value = value
-        self.index = index
-        print("AssignNode Init id= ", self.id)
-
-    def evaluate(self):
-        # FIXME: or can take index out of set_var, by get value then set it
-        set_var(self.id, self.value, self.index)
-        print("AssignNode evaluate = ", var_lookup(self.id))
-
-    def execute(self):
-        self.evaluate()
-        print("AssignNode execute = ", self.id, var_lookup(self.id).execute())
+def p_statement_list_val(p):
+    '''
+    statement_list : statement
+    '''
+    p[0] = [p[1]]
 
 
-# def p_expression_statement(t):
-#     'statement : expression SEMICOLON'
-#     debug("p_expression_statement:", t[1])
-#     debug("p_expression_statement:", t[1].value)
-#     debug("p_expression_statement:", t[1].evaluate())
-#     t[0] = PrintNode(t[1].evaluate())
-#
-#     # print(t[1])
-
-
-# new
 def p_statements(t):
-    '''statement : assignment SEMICOLON
-                 | print SEMICOLON'''
-    print("p_statements: ", t[1])
+    '''statement : block
+                 | assignment SEMICOLON
+                 | print SEMICOLON
+                 | expression SEMICOLON
+                 | ifelse_statement
+                 | if_statement
+                 | while_statement
+    '''
+    debug("p_statements:** ", t[1])
     t[0] = t[1]
+
+
+class ConditionalNode(Node):
+    def __init__(self, boolean, block, block2=None):
+        super().__init__()
+        self.boolean = boolean
+        self.block = block
+        self.block2 = block2
+
+    def set_else_block(self, b):
+        self.block2 = b
+
+    def evaluate(self):
+        boolean = self.boolean.evaluate()
+        if not (isinstance(boolean, bool) and isinstance(self.block, BlockNode)):
+            raise ValueError("not bool or block")
+        if boolean:
+            self.block.evaluate()
+        else:
+            if self.block2 is not None:
+                self.block2.evaluate()
+
+    def execute(self):
+        boolean = self.boolean.execute()
+        if not (isinstance(boolean, bool) and isinstance(self.block, BlockNode)):
+            raise ValueError("not bool or block")
+        if boolean:
+            self.block.execute()
+        else:
+            if self.block2 is not None:
+                self.block2.execute()
+
+class WhileNode(Node):
+    def __init__(self, bool, block):
+        super().__init__()
+        self.boolean = bool
+        self.block = block
+
+    def evaluate(self):
+        boolean = self.boolean.evaluate()
+        if not (isinstance(boolean, bool) and isinstance(self.block, BlockNode)):
+            raise ValueError("not bool or block")
+
+        while self.boolean.evaluate():
+            self.block.evaluate()
+
+
+    def execute(self):
+        boolean = self.boolean.execute()
+        if not (isinstance(boolean, bool) and isinstance(self.block, BlockNode)):
+            raise ValueError("not bool or block")
+        while self.boolean.execute():
+            self.block.execute()
+
+def p_while(p):
+    '''
+    while_statement : WHILE LPAREN expression RPAREN block
+    '''
+    p[0] = WhileNode(p[3],p[5])
+
+def p_statement_ifelse(p):
+    '''
+    ifelse_statement : if_statement ELSE block
+    '''
+    debug("p_statement_ifelse", p[3])
+    p[1].set_else_block(p[3])
+    p[0] =p[1]
+
+
+def p_statement_if(p):
+    '''
+    if_statement : IF LPAREN expression RPAREN block
+    '''
+    debug("p_statement_if", p[5])
+    p[0] = ConditionalNode(p[3], p[5])
 
 
 def p_statement_assignment(t):
     '''assignment : ID EQUAL expression
                   | expression LBRACKET expression RBRACKET EQUAL expression '''
-    print("p_statement_assignment: ")
+    debug("p_statement_assignment: ")
     if len(t) == 4:
-        print("p_statement_assignment regular : ")
 
         t[0] = AssignNode(t[1], t[3])
-        print("p_statement_assignment regular : ")
-        print("p_statement_assignment done")
     else:
-        name = t[1].evaluate()
-        index = t[3].evaluate()
-        if not isinstance(name, IdNode) or isinstance(index, int):  # FIXME: int or IntNode?
-            raise ValueError("p_statement_assignment semantic")
-        t[0] = AssignNode(name, t[5], index)
+        # name = t[1].evaluate()
+        # index = t[3].evaluate()
+        # if not isinstance(name, IdNode) or isinstance(index, int):  # FIXME: int or IntNode?
+        #     raise ValueError("p_statement_assignment semantic")
+        # t[0] = AssignNode(name, t[5], index)
+        t[0] = AssignNode(t[1], t[6], t[3])
 
     # print(t[1])
 
@@ -546,7 +794,7 @@ def p_expression_binop(t):
     # print(t[1].value)
     # print(t[3].value)
     t[0] = BopNode(t[2], t[1], t[3])
-    debug(t[0])
+    debug("p_expression_binop", t[0])
 
 
 def p_expression_elements(t):
@@ -572,25 +820,6 @@ def p_expression_tuple(t):
     else:
         t[0] = TupleNode([])
 
-class IndexingNode(Node):
-    def __init__(self, v, index):
-        self.value = v
-        self.index = index
-
-    def evaluate(self):
-        index = self.index.evaluate()
-        v = self.value
-        debug("indexing node eval v = ",v)
-        if isinstance(index, bool) or not isinstance(index, int) or not isinstance(v, (ListNode, TupleNode, StringNode, IdNode)):
-            raise ValueError("IndexingNode")
-        if isinstance(v, IdNode):
-            v = v.evaluate()
-            debug("indexing node eval v = ", v)
-
-        return v.get_element(index)
-
-    def execute(self):
-        return self.evaluate().execute()
 
 def p_expression_tuple_index(t):
     '''indexing : HASHTAG expression LPAREN expression RPAREN
@@ -602,10 +831,10 @@ def p_expression_tuple_index(t):
     #     raise ValueError("p_expression_tuple_index")
     if len(t) > 4:
         # t[0] = t[4].get_element(index)
-        t[0] = IndexingNode(t[2],t[4])
+        t[0] = IndexingNode(t[4],t[2])
     else:
         # t[0] = t[3].get_element(index)
-        t[0] = IndexingNode(t[2],t[3])
+        t[0] = IndexingNode(t[3], t[2])
 
 
 def p_expression_list(t):
@@ -632,22 +861,6 @@ def p_expression_list_index(t):
     # t[0] = t[1].get_element(index)
     t[0] = IndexingNode(t[1], t[3])
 
-class InNode(Node):
-    def __init__(self, v1, v2):
-        self.v1 = v1
-        self.v2 = v2
-
-    def evaluate(self):
-        v1 = self.v1.evaluate()
-        v2 = self.v2.evaluate()
-        if isinstance(v2, (list, str)):
-            condition = v1 in v2
-            return BooleanNode(condition)
-        else:
-            raise ValueError
-
-    def execute(self):
-        return self.evaluate()
 
 def p_expression_in(t):
     'expression : expression IN expression'
@@ -666,17 +879,7 @@ def p_expression_in(t):
     #         raise ValueError
     # else:
     #     raise ValueError
-    t[0] = InNode(t[1],t[3])
-
-class ConsNode(Node):
-    def __init__(self, v1, v2):
-        self.v1 = v1
-        self.v2 = v2
-    def evaluate(self):
-        self.v2.cons(self.v1)
-
-    def execute(self):
-        return self.evaluate()
+    t[0] = InNode(t[1], t[3])
 
 
 def p_expression_cons(t):
@@ -684,7 +887,7 @@ def p_expression_cons(t):
     # t3 must be list
     # print(t[1])
 
-    t[0] = ConsNode(t[1],t[3])
+    t[0] = ConsNode(t[1], t[3])
     # t[0] = t[3].cons(t[1])
 
 
@@ -711,18 +914,6 @@ def p_expression_bool_op(t):
     t[0] = BoolOpNode(t[2], t[1], t[3])
     # print(t[0].value, t[0])
 
-class NotNode(Node):
-    def __init__(self, v):
-        self.v = v
-
-    def evaluate(self):
-        v = self.v.evaluate()
-        if not isinstance(v, bool):
-            raise ValueError
-        return BooleanNode(not v)
-
-    def execute(self):
-        return self.evaluate()
 
 def p_expression_not(t):
     'expression : NOT expression'
@@ -771,88 +962,6 @@ def p_error(t):
 yacc.yacc(debug=0)
 
 
-def test_one(codes=None):
-    if codes is None:
-        codes = ['print(1)']
-    for code in codes:
-        print(">>>", code)
-        if code == "":
-            continue
-        try:
-            lex.input(code)
-            while True:
-                token = lex.token()
-                if not token:
-                    break
-                print(token)
-            print("_______")
-            ast = yacc.parse(code)
-            debug("ast:", ast)
-            result = ast.execute()
-            debug("executed successfully")
-            debug("result:", result)
-        except SyntaxError as err:
-            print("err:", err)
-            print("SYNTAX ERROR")
-
-        except Exception as err:
-            print("err:", err)
-
-            print("SEMANTIC ERROR")
-
-    # code = [input]
-    # code = [
-    # "11==12 orelse 1>2;"
-    # '1/0;'
-    # '-1;'
-    # "[1]::2::[4];"
-    # "5mod2;"
-    # "1 + 2.0 * 3.0;"
-    #
-    # '1-2;'
-    # "3 div 2;"
-    # "3 mod 2;"
-    # "4 mod 2;"
-    # "true;"
-    # "'Hello\\\n\\\\World';"
-
-    # ]
-
-    # try:
-    #     # lex.input(code[0])
-    #     # while True:
-    #     #     token = lex.token()
-    #     #     if not token:
-    #     #         break
-    #     #     print(token)
-    #     print(">>>", code[0])
-    #     ast = yacc.parse(code[0])
-    #
-    #     ast.execute()
-    #     debug("executed successfully")
-    #
-    #     # print(ast)
-    #     # print(eval(code))
-    #     # assert ast.execute() == eval(code)
-    # except AssertionError:
-    #     print("AssertionError")
-    # except SyntaxError as err:
-    #     print("err:", err)
-    #     print("SYNTAX ERROR")
-    #
-    # except Exception as err:
-    #     print("err:", err)
-    #     print("SEMANTIC ERROR")
-
-
-# wei
-codes = [
-    'x=[1];',
-    'print(x[0]);',
-]
-
-test_one(codes)
-print('------------')
 
 
 def filecompare(fn1, fn2):
@@ -940,33 +1049,33 @@ if len(sys.argv) != 2:
     sys.exit("invalid arguments")
 
 infile = sys.argv[1]
-fd = open(infile, 'r')
-codes = []
-for line in fd:
-    codes.append(line.strip())
-debug(codes)
 
-for code in codes:
-    print(">>>", code)
-    if code == "":
-        continue
-    try:
-        lex.input(code)
-        while True:
-            token = lex.token()
-            if not token:
-                break
-            print(token)
+with open(infile, 'r') as myfile:
+    code = myfile.read().replace('\n', '')
+# root = parser.parse(data)
+# root.evaluate()
 
-        ast = yacc.parse(code)
-        debug("ast:", ast)
-        result = ast.execute()
-        debug("result:", result)
-    except SyntaxError as err:
-        print("err:", err)
-        print("SYNTAX ERROR")
+debug(">>>", code)
+if code == "":
+    exit(0)
+try:
+    lex.input(code)
+    while True:
+        token = lex.token()
+        if not token:
+            break
+        debug(token)
+    debug('_______________')
 
-    except Exception as err:
-        print("err:", err)
+    ast = yacc.parse(code)
+    debug("ast:", ast)
+    result = ast.execute()
+    debug("result:", result)
+except SyntaxError as err:
+    debug("err:", err)
+    print("SYNTAX ERROR")
 
-        print("SEMANTIC ERROR")
+except Exception as err:
+    debug("err:", err)
+
+    print("SEMANTIC ERROR")
