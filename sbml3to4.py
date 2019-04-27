@@ -6,7 +6,7 @@ import sys
 import ply.yacc as yacc
 
 debugging = True
-debugging = False
+# debugging = False
 
 
 def debug(s, t=""):
@@ -43,12 +43,16 @@ class IdNode(Node):
         debug("IDNode init = ", self.value)
 
     def evaluate(self):
-        debug("IDNode evaluate:", var_lookup(self.value))
-        return var_lookup(self.value)
+        debug("IDNode evaluate:", var_dict[self.value])
+        debug("ffwff")
+        return var_dict[self.value]
+        # return var_lookup(self.value)
+        # return var_lookup(self.value)
         # return self.value
 
     def execute(self):
-        return var_lookup(self.value)
+        return var_dict[self.value]
+
 
         # return self.evaluate().execute()
 
@@ -333,7 +337,7 @@ class ListNode(Node):
         return self.value[index]
 
     def evaluate(self):
-        debug("List Node evall")
+        debug("List Node evall", self.value)
 
         return [x.evaluate() for x in self.value]
 
@@ -381,13 +385,12 @@ class PrintNode(Node):
 
 
 def set_var(v, val, index=None):
-    # global var_dict
-    d = var_dict
+    global var_dict
 
     if index is None:
         var_dict[v] = val.evaluate()
     else:
-        var_dict[v][index] = val.evaluate()
+        v.execute()[index] = val.evaluate()
     debug('set_var: {}->{}'.format(v,val))
 
 
@@ -408,13 +411,12 @@ class AssignNode(Node):
         # debug("AssignNode evaluate = ", var_lookup(self.id))
 
     def execute(self):
-
         index = self.index
         if index is not None:
             index = index.execute()
         # FIXME: or can take index out of set_var, by get value then set it
         set_var(self.id, self.value, index)
-        debug("AssignNode execute = ", var_lookup(self.id))
+        # debug("AssignNode execute = ", var_dict[self.id])
 
         # self.evaluate()
         # debug("AssignNode execute = ", var_lookup(self.id).execute())
@@ -473,7 +475,13 @@ class InNode(Node):
             raise ValueError
 
     def execute(self):
-        return self.evaluate()
+        v1 = self.v1.execute()
+        v2 = self.v2.execute()
+        if isinstance(v2, (list, str)):
+            condition = v1 in v2
+            return condition
+        else:
+            raise ValueError
 
 
 class ConsNode(Node):
@@ -864,21 +872,7 @@ def p_expression_list_index(t):
 
 def p_expression_in(t):
     'expression : expression IN expression'
-    # t1 can be anything, when t3 is list
-    # t1 must be str when t3 is str
-    # t3 = t[3].evaluate()
-    # t1 = t[1].evaluate()
-    # if isinstance(t3, list):
-    #     condition = t1 in t3
-    #     t[0] = BooleanNode(condition)
-    # elif isinstance(t3, str):
-    #     if isinstance(t1, str):
-    #         condition = t1 in t3
-    #         t[0] = BooleanNode(condition)
-    #     else:
-    #         raise ValueError
-    # else:
-    #     raise ValueError
+
     t[0] = InNode(t[1], t[3])
 
 
