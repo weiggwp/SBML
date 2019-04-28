@@ -1,0 +1,79 @@
+{
+
+{
+    a = 1;
+    print(a);
+}
+
+   x = [[1],[2]];
+    print(x[0][0]);
+    {
+	a = "abc";
+	print('c' in a);
+    }
+    {
+    number = 33;
+    isPrime = 1;
+    i = 2;
+    while(isPrime==1 andalso number>i){
+        if (number mod i==0) {
+            isPrime = 0;
+        }
+        i = i + 1;
+    }
+    if(isPrime==1){
+         print("isPrime is true");
+    } else {
+        print("isPrime is false");
+    }
+}
+{
+    data = [ [ 100, 42 ], [ 100, 50 ], [ 123, 456 ], [ 300, 9000 ] ];
+    result = [ 0, 0, 0, 0 ];
+    i = 0;
+    while (i < 4){
+        a = data[i][0];
+        b = data[i][1];
+        if (a > 0){
+            while (b > 0){
+                if (a > b){
+                    a = a - b;
+                } else {
+                    b = b - a;
+                }
+            }
+        }
+        result[i] = a;
+        i = i + 1;
+    }
+    print(result);
+
+}
+
+{
+a = [[1]];
+a[1-1][0] = 2;
+print(a);
+}
+
+{
+    b = 0;
+    a = [[[[0]]],[1]];
+    a[b][b][b] = 1;
+    print(a);
+    }
+
+print("a");
+print([1, "a", 2]);
+
+
+{
+   i = 0;
+    while(i<10){
+        print(i);
+        i = i+1;
+    }
+}
+
+
+}
