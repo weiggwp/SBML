@@ -5,7 +5,7 @@ import ply.lex as lex
 import sys
 import ply.yacc as yacc
 
-# debugging = True
+debugging = True
 debugging = False
 
 
@@ -14,21 +14,24 @@ def debug(s, t=""):
     if debugging:
         print(s, t)
 
+
 class Stack:
     def __init__(self):
         self.stack = [{}]
 
-    def push(self,dic):
+    def push(self, dic):
         self.stack.append(dic)
+
     def pop(self):
         return self.stack.pop()
-    def peep(self):
-        return self.stack[-1]
 
+    def peep(self,index = -1):
+        return self.stack[index]
 
 
 # global stack
 stack = Stack()
+
 
 # var_dictionary of names
 # var_dict = {}
@@ -55,7 +58,7 @@ class IdNode(Node):
         debug("IDNode init = ", self.value)
 
     def execute(self):
-        # debug("IDNode execute: returns:", var_dict[self.value])
+        debug("IDNode execute: returns:", stack.stack)
         return stack.peep()[self.value]
 
 
@@ -274,6 +277,7 @@ class ListNode(Node):
         return self
 
     def get_element(self, index):
+        debug("Lsit Node get element")
         if index < 0:
             raise Exception("list node ERROR")
         return self.value[index]
@@ -351,18 +355,20 @@ class BlockNode(Node):
         self.statementList = sl
 
     def execute(self):
+        debug("blocknode statements: {}".format(self.statementList))
         for statement in self.statementList:
             statement.execute()
 
 
 class IndexingNode(Node):
-    def __init__(self, v, index):
+    def __init__(self, v, index,offset=0):
         super().__init__()
         self.value = v
         self.index = index
+        self.offset = offset
 
     def execute(self):
-        index = self.index.execute()
+        index = self.index.execute()-self.offset
         v = self.value
         debug('Indexing Node exe index = {}, v = {}'.format(index, v))
         debug("indexing node exe v = ", v)
@@ -399,7 +405,7 @@ class ConsNode(Node):
         self.v2 = v2
 
     def execute(self):
-        self.v2.cons(self.v1)
+        return [self.v1.execute()] + self.v2.execute()
 
 
 class NotNode(Node):
@@ -577,29 +583,51 @@ precedence = (
 ''' fun x(y) = {y = 1;}y;
     x(1);   FunctionNode.execute(1);
 '''
+
+
 class FunctionNode(Node):
-    def __init__(self, id, args, block, ret_id):
+    def __init__(self, id, args, block, ret_exp):
         super().__init__()
         self.id = id
         self.args = args
         self.block = block
-        self.ret_id = ret_id
-        self.stack = {}
+        self.ret_exp = ret_exp
 
-    def execute(self,vals):
+    def execute(self):
+        debug("Function Node exe: {}".format(self.id))
         # execute block first then the expression is evaluated and the value is returned.
-        pass
+        # store this func on stack
+        stack.peep()[self.id.value] = self
+
+    def run(self, argv):
+        debug("hg76ydv6yn6``````````, args:{}, argv:{}".format(self.args,argv))
+        frame = {self.id: self} # FIXME: func are static?
+        for i in range(len(argv)):
+            frame[self.args.get_element(i).value] = argv[i].execute()
+        stack.push(frame)
+        self.block.execute()
+
+        print("return exp:{}".format(self.ret_exp.execute()))
+        x = self.ret_exp.execute()
+        frame =  stack.pop()
+        return x
+
 
 class ProgramNode(Node):
-    def __init__(self, block, funcs = None):
+    def __init__(self, block, funcs=None):
+        super().__init__()
         self.block = block
         self.funcs = funcs
 
     def execute(self):
-        print("ProgramNode: {}".format(self.block))
+        print("ProgramNode: block:{}, fucs = {}".format(self.block,self.funcs))
         if self.funcs is not None:
-            [func.execute() for func in self.funcs]
+            # [func.execute() for func in self.funcs]
+            self.funcs.execute()
+
+        print("prognode end&*%^&*(")
         self.block.execute()
+
 
 def p_program(p):
     '''
@@ -608,12 +636,14 @@ def p_program(p):
     print("p_program")
     p[0] = ProgramNode(p[2], p[1])
 
+
 def p_program_block(p):
     '''
     program : block
     '''
     print("p_program_block")
     p[0] = ProgramNode(p[1])
+
 
 def p_program_funcs(p):
     '''
@@ -766,7 +796,22 @@ def p_expression_binop(t):
     t[0] = BopNode(t[2], t[1], t[3])
     debug("p_expression_binop", t[0])
 
+class FuncCallNode(Node):
+    def __init__(self, id, args):
+        self.id = id
+        self.args = args
 
+    def execute(self):
+        # debug("FuncCall execute: id={}, args = {}".format(self.id.execute(),self.args.value))
+        debug("stack********",stack.peep(0))
+        return stack.peep(0)[self.id.value].run(self.args.value)
+
+
+def p_expression_func_call(p):
+    '''
+    expression : ID LPAREN elements RPAREN
+    '''
+    p[0] = FuncCallNode(p[1],p[3])
 def p_elements(t):
     '''elements : elements COMMA expression
                 | expression'''
@@ -794,17 +839,12 @@ def p_expression_tuple(t):
 def p_expression_tuple_index(t):
     '''indexing : HASHTAG expression LPAREN expression RPAREN
                 | HASHTAG expression expression '''
-    # print("p_expression_tuple_index")
-    # print(t[2])
-    # index = t[2].evaluate()
-    # if isinstance(index, bool) or not isinstance(index, int):
-    #     raise ValueError("p_expression_tuple_index")
     if len(t) > 4:
         # t[0] = t[4].get_element(index)
-        t[0] = IndexingNode(t[4], t[2])
+        t[0] = IndexingNode(t[4], t[2],1)
     else:
         # t[0] = t[3].get_element(index)
-        t[0] = IndexingNode(t[3], t[2])
+        t[0] = IndexingNode(t[3], t[2],1)
 
 
 def p_expression_list(t):
